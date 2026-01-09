@@ -950,7 +950,7 @@
         }
 
         function generateAggregateReport(data) {
-            // ... (نفس منطق التقرير السابق) ...
+            // ... (نفس المتغيرات السابقة) ...
              const totalStudents = data.reduce((acc, cur) => acc + cur.total, 0);
             const totalExc = data.reduce((acc, cur) => acc + cur.a, 0);
             const totalLow = data.reduce((acc, cur) => acc + (cur.d + cur.fail), 0);
@@ -967,8 +967,19 @@
             document.getElementById('report-low-rate').innerText = lowRate + '%';
 
             // 1. الملخص
-            const sortedByExc = [...data].sort((a,b) => b.a - a.a);
-            const sortedByLow = [...data].sort((a,b) => (b.d+b.fail) - (a.d+a.fail));
+            // ترتيب التفوق (بالنسبة المئوية من الأعلى للأقل) -- تعديل جديد
+            const sortedByExcRate = [...data].sort((a, b) => {
+                const rateA = a.total > 0 ? (a.a / a.total) : 0;
+                const rateB = b.total > 0 ? (b.a / b.total) : 0;
+                return rateB - rateA; // تنازلي
+            });
+            
+            // ترتيب التدني (بالنسبة المئوية من الأعلى للأقل)
+            const sortedByLowRate = [...data].sort((a, b) => {
+                const rateA = a.total > 0 ? ((a.d + a.fail) / a.total) : 0;
+                const rateB = b.total > 0 ? ((b.d + b.fail) / b.total) : 0;
+                return rateB - rateA; // تنازلي
+            });
             
             let summaryHTML = `
                 <p>بناءً على تحليل البيانات المدخلة لعدد <b>${data.length}</b> شعبة، 
@@ -978,39 +989,48 @@
                 وبلغت نسبة النجاح العامة لجميع الشعب <b>${avgSuccess}%</b>.</p>
             `;
             
-            if(sortedByExc.length > 0) {
+            if(sortedByExcRate.length > 0) {
                  summaryHTML += `
                 <p class="mt-4">
-                تصدرت الشعبة <b>${sortedByExc[0].displayName}</b> القائمة بأعلى عدد من المتفوقين (${sortedByExc[0].a}).
-                في المقابل، سجلت الشعبة <b>${sortedByLow[0].displayName}</b> أعلى عدد لحالات التدني (${sortedByLow[0].d + sortedByLow[0].fail}).
-                </p>`;
+                تصدرت الشعبة <b>${sortedByExcRate[0].displayName}</b> القائمة بأعلى نسبة من المتفوقين.
+                في المقابل، سجلت الشعبة <b>${sortedByLowRate[0].displayName}</b> أعلى نسبة لحالات التدني.</p>`;
             }
             
             document.getElementById('executive-summary').innerHTML = summaryHTML;
 
-            // 2. القوائم
-            const top5 = sortedByExc.slice(0, 5);
-            const low5 = sortedByLow.slice(0, 5);
-
-            document.getElementById('report-rank-high').innerHTML = top5.map((row, i) => `
-                <li class="p-3 flex justify-between items-center bg-white hover:bg-slate-50">
+            // 2. القوائم (عرض الكل)
+            
+            // قائمة التفوق (الكل - مرتبة بالنسبة) -- تعديل جديد لإظهار النسبة
+            document.getElementById('report-rank-high').innerHTML = sortedByExcRate.map((row, i) => {
+                const rate = row.total > 0 ? ((row.a / row.total) * 100).toFixed(1) : 0;
+                return `
+                <li class="p-3 flex justify-between items-center bg-white hover:bg-slate-50 border-b border-slate-50 last:border-0">
                     <div class="flex items-center gap-3">
                         <span class="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center text-xs">${i+1}</span>
                         <div><div class="font-bold text-slate-800">${row.displayName}</div></div>
                     </div>
-                    <div class="text-emerald-700 font-bold text-lg">${row.a}</div>
+                    <div class="text-right">
+                        <div class="text-emerald-700 font-bold text-lg">${row.a} <span class="text-xs text-emerald-500 font-normal">طالب</span></div>
+                        <div class="text-xs text-emerald-600 font-bold bg-emerald-50 px-1 rounded inline-block">نسبة: ${rate}%</div>
+                    </div>
                 </li>
-            `).join('');
+            `}).join('');
 
-            document.getElementById('report-rank-low').innerHTML = low5.map((row, i) => `
-                <li class="p-3 flex justify-between items-center bg-white hover:bg-slate-50">
+            // قائمة التدني (الكل - مرتبة بالنسبة)
+            document.getElementById('report-rank-low').innerHTML = sortedByLowRate.map((row, i) => {
+                const rate = row.total > 0 ? (((row.d + row.fail) / row.total) * 100).toFixed(1) : 0;
+                return `
+                <li class="p-3 flex justify-between items-center bg-white hover:bg-slate-50 border-b border-slate-50 last:border-0">
                     <div class="flex items-center gap-3">
                         <span class="w-6 h-6 rounded-full bg-red-100 text-red-700 font-bold flex items-center justify-center text-xs">${i+1}</span>
                         <div><div class="font-bold text-slate-800">${row.displayName}</div></div>
                     </div>
-                    <div class="text-red-700 font-bold text-lg">${row.d + row.fail}</div>
+                    <div class="text-right">
+                        <div class="text-red-700 font-bold text-lg">${row.d + row.fail} <span class="text-xs text-red-400 font-normal">طالب</span></div>
+                        <div class="text-xs text-red-600 font-bold bg-red-50 px-1 rounded inline-block">نسبة: ${rate}%</div>
+                    </div>
                 </li>
-            `).join('');
+            `}).join('');
 
             // 4. جدول البيانات التفصيلي (للطباعة)
             const printTableContainer = document.getElementById('report-detailed-table');
@@ -1051,14 +1071,24 @@
             const recContainer = document.getElementById('report-recommendations');
             recContainer.innerHTML = '';
             
-            const criticalClasses = data.filter(r => (r.d + r.fail) >= 3);
+            // تصفية الفصول ذات نسب التدني العالية (مثلاً أكثر من 15%)
+            const criticalClasses = sortedByLowRate.filter(r => {
+                const rate = r.total > 0 ? ((r.d + r.fail) / r.total) * 100 : 0;
+                return rate >= 15 || (r.d + r.fail) >= 3;
+            });
             
             if (criticalClasses.length > 0) {
-                let listItems = criticalClasses.map(c => `<li class="mb-1 text-slate-700"><b class="text-red-700">${c.displayName}</b> (${c.d+c.fail} حالات)</li>`).slice(0, 6).join('');
+                let listItems = criticalClasses.map(c => {
+                    const rate = c.total > 0 ? (((c.d + c.fail) / c.total) * 100).toFixed(1) : 0;
+                    return `<li class="mb-1 text-slate-700"><b class="text-red-700">${c.displayName}</b> (${c.d+c.fail} حالات - <span class="text-xs bg-red-100 px-1 rounded">${rate}%</span>)</li>`;
+                }).slice(0, 10).join(''); // عرض أول 10 فقط في التوصيات لتجنب الطول الزائد
+                
+                if(criticalClasses.length > 10) listItems += `<li class="text-slate-500 italic">...وغيرها (راجع جدول الترتيب)</li>`;
+
                 recContainer.innerHTML += `
                     <div class="bg-white border-l-4 border-red-500 p-6 shadow-sm rounded-r-lg break-inside-avoid">
-                        <h4 class="font-bold text-lg text-red-800 mb-3">⚠️ التدخل العلاجي العاجل</h4>
-                        <p class="text-slate-700 mb-3">شعب تحتاج لتدخل:</p>
+                        <h4 class="font-bold text-lg text-red-800 mb-3">⚠️ التدخل العلاجي العاجل (الأكثر احتياجاً)</h4>
+                        <p class="text-slate-700 mb-3">بناءً على نسب التدني، يوصى بالتركيز الفوري على الشعب التالية:</p>
                         <ul class="list-disc list-inside bg-red-50 p-4 rounded-lg mb-3 text-sm">${listItems}</ul>
                     </div>
                 `;
