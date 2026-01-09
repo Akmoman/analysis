@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام تحليل النتائج الشامل</title>
+    
+    <!-- مكتبات التنسيق والخطوط -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+    
+    <!-- مكتبة الرسوم البيانية -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- مكتبة قراءة ملفات PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+
+    <style>
+        body { font-family: 'Tajawal', sans-serif; background-color: #f8fafc; }
+        .gradient-text {
+            background: linear-gradient(to right, #1e40af, #3b82f6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .card-hover:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+        .editable-cell {
+            border: 1px dashed #cbd5e1;
+            background-color: #f8fafc;
+            transition: all 0.2s;
+            cursor: text;
+        }
+        .editable-cell:hover { background-color: #fff; border-color: #3b82f6; }
+        .editable-cell:focus { 
+            outline: none; 
+            background-color: #fff; 
+            border: 2px solid #3b82f6; 
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            display: none;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* تنسيقات الطباعة */
+        @media print {
+            body * { visibility: hidden; }
+            #printable-report, #printable-report * { visibility: visible; }
+            #printable-report {
+                position: absolute;
+                left: 0; top: 0; width: 100%;
+                background: white; padding: 0; margin: 0;
+                box-shadow: none; border: none;
+            }
+            .no-print { display: none !important; }
+            .page-break { page-break-before: always; }
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        }
+    </style>
+</head>
+<body class="text-slate-800">
+
+    <!-- رأس الصفحة -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-50 no-print">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="bg-blue-600 p-2.5 rounded-xl shadow-lg shadow-blue-200">
+                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-bold gradient-text">المحلل الشامل</h1>
+                    <p class="text-xs text-slate-500 font-medium">نظام قراءة ذكي + تحكم كامل بالبيانات</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-3">
+                <button onclick="clearAllData()" class="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-4 py-2.5 rounded-lg font-bold transition-all flex items-center gap-2 text-sm">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    حذف الكل
+                </button>
+                <button onclick="prepareAndPrint()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-lg font-bold transition-all flex items-center gap-2 text-sm">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+                    طباعة
+                </button>
+                <label for="pdf-upload" class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-bold shadow-md transition-all flex items-center gap-2 text-sm">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    رفع ملفات (PDF)
+                </label>
+                <input type="file" id="pdf-upload" accept=".pdf" multiple class="hidden" onchange="handleFilesUpload(event)">
+                <div id="loader" class="loader"></div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        
+        <!-- رسالة تنبيه حول التعديل -->
+        <div id="instruction-banner" class="no-print bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-3">
+            <svg class="w-6 h-6 text-blue-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <div>
+                <h3 class="font-bold text-blue-800 text-sm">تنويه هام:</h3>
+                <p class="text-sm text-blue-700">تم إضافة ميزة <b>حذف الصفوف</b>. إذا ظهر صف "الإجمالي" أو صف غير مرغوب فيه، يمكنك حذفه بالضغط على أيقونة سلة المهملات في نهاية الصف.</p>
+            </div>
+        </div>
+
+        <!-- شريط التحكم بالملفات -->
+        <div id="files-bar" class="no-print hidden bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap gap-3 items-center">
+            <span class="text-sm font-bold text-slate-500 ml-2">الملفات النشطة:</span>
+            <div id="files-buttons" class="flex flex-wrap gap-2"></div>
+        </div>
+
+        <!-- لوحة التحكم الإحصائية -->
+        <div class="no-print space-y-8">
+            <div class="flex items-center justify-between">
+                <h2 id="dashboard-title" class="text-xl font-bold text-slate-800">اللوحة التجميعية الشاملة</h2>
+                <span id="current-view-badge" class="bg-blue-100 text-blue-800 text-xs font-bold px-3 py-1 rounded-full">--</span>
+            </div>
+
+            <!-- ملخص المؤشرات -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <!-- إجمالي الطلاب -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 card-hover">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-slate-500 font-medium text-sm mb-1">إجمالي الطلاب</p>
+                            <h3 class="text-3xl font-bold text-slate-800" id="stat-total">0</h3>
+                        </div>
+                        <div class="bg-blue-100 p-3 rounded-xl text-blue-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- التفوق -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 card-hover">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-slate-500 font-medium text-sm mb-1">مستوى التفوق (أ)</p>
+                            <h3 class="text-3xl font-bold text-slate-800" id="stat-excellence">0</h3>
+                        </div>
+                        <div class="bg-emerald-100 p-3 rounded-xl text-emerald-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        </div>
+                    </div>
+                    <div class="mt-2 text-xs text-emerald-600 font-bold bg-emerald-50 inline-block px-2 py-1 rounded">نسبة: <span id="rate-excellence">0%</span></div>
+                </div>
+
+                <!-- التدني -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 card-hover">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-slate-500 font-medium text-sm mb-1">مستوى التدني (د+هـ)</p>
+                            <h3 class="text-3xl font-bold text-slate-800" id="stat-low">0</h3>
+                        </div>
+                        <div class="bg-red-100 p-3 rounded-xl text-red-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                        </div>
+                    </div>
+                    <div class="mt-2 text-xs text-red-600 font-bold bg-red-50 inline-block px-2 py-1 rounded">نسبة: <span id="rate-low">0%</span></div>
+                </div>
+
+                <!-- المتوسط العام -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 card-hover">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-slate-500 font-medium text-sm mb-1">نسبة النجاح العامة</p>
+                            <h3 class="text-3xl font-bold text-slate-800" id="stat-success-rate">0%</h3>
+                        </div>
+                        <div class="bg-amber-100 p-3 rounded-xl text-amber-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-400 mt-2">متوسط جميع الشعب (موزون)</p>
+                </div>
+            </div>
+
+            <!-- الرسوم البيانية -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- الرسم المقارن -->
+                <div class="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <h3 class="font-bold text-lg text-slate-800 mb-6 flex justify-between">
+                        <span>تحليل المستويات</span>
+                        <span class="text-xs font-normal text-slate-500 mt-1">مقارنة بين الفصول/الملفات</span>
+                    </h3>
+                    <div class="relative h-80 w-full">
+                        <canvas id="mainChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- التوزيع الدائري -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <h3 class="font-bold text-lg text-slate-800 mb-6">التوزيع العام للمادة</h3>
+                    <div class="relative h-64 w-full flex justify-center">
+                        <canvas id="pieChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- الجدول التفصيلي -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                <div class="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                    <div>
+                        <h3 class="font-bold text-lg text-slate-800">سجل البيانات التفصيلي (قابل للتعديل)</h3>
+                        <p class="text-sm text-slate-500">اضغط على أي رقم لتعديله، وسيتم تحديث التحليل فوراً</p>
+                    </div>
+                    <div class="text-xs font-mono bg-slate-200 px-2 py-1 rounded text-slate-600" id="files-count-badge">0 ملفات</div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-right">
+                        <thead class="bg-slate-50 text-slate-600 font-bold uppercase">
+                            <tr>
+                                <th class="px-6 py-4">مصدر الملف / الصف</th>
+                                <th class="px-6 py-4">الشعبة</th>
+                                <th class="px-6 py-4 text-emerald-600">التفوق (أ)</th>
+                                <th class="px-6 py-4">جيد جداً (ب)</th>
+                                <th class="px-6 py-4">جيد (ج)</th>
+                                <th class="px-6 py-4 text-orange-500">مقبول (د)</th>
+                                <th class="px-6 py-4 text-red-600">ضعيف (هـ)</th>
+                                <th class="px-6 py-4 text-red-700 bg-red-50">التدني (د+هـ)</th>
+                                <th class="px-6 py-4">المجموع</th>
+                                <th class="px-6 py-4 text-blue-700 bg-blue-50">نسبة النجاح</th>
+                                <th class="px-6 py-4">حذف</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100" id="data-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================ -->
+        <!-- التقرير التجميعي الشامل (للطباعة) -->
+        <!-- ============================================ -->
+        <div id="printable-report" class="bg-white p-10 rounded-2xl shadow-lg border border-slate-200 mt-8">
+            <!-- ترويسة التقرير -->
+            <div class="flex justify-between items-center mb-10 border-b-2 border-slate-800 pb-6">
+                <div class="flex items-center gap-4">
+                    <!-- شعار افتراضي -->
+                    <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center text-slate-400">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+                    </div>
+                    <div>
+                        <h2 class="text-3xl font-extrabold text-slate-900 mb-1">التقرير التحليلي التجميعي</h2>
+                        <p class="text-slate-600 font-medium text-lg">تحليل نتائج المادة (شامل لجميع الملفات المرفقة)</p>
+                    </div>
+                </div>
+                <div class="text-left">
+                    <div class="text-sm text-slate-500 font-bold mb-1">تاريخ الإصدار</div>
+                    <div id="report-date" class="text-xl font-mono text-slate-800"></div>
+                </div>
+            </div>
+
+            <!-- 1. الملخص التنفيذي -->
+            <section class="mb-12">
+                <h3 class="text-2xl font-bold text-blue-900 mb-6 flex items-center gap-3 border-b border-blue-100 pb-2">
+                    <span class="bg-blue-600 text-white w-8 h-8 rounded-lg flex items-center justify-center text-sm">1</span>
+                    الملخص التنفيذي الشامل
+                </h3>
+                <div id="executive-summary" class="bg-blue-50 p-6 rounded-lg border-r-4 border-blue-600 text-lg leading-loose text-justify text-slate-800 shadow-sm">
+                    <!-- يتم التوليد تلقائياً -->
+                </div>
+            </section>
+
+            <!-- 2. بطاقات المؤشرات العامة -->
+            <section class="mb-12">
+                <h3 class="text-xl font-bold text-slate-800 mb-4">المؤشرات العامة للأداء</h3>
+                <div class="grid grid-cols-4 gap-4 text-center">
+                    <div class="border border-slate-200 p-4 rounded-lg bg-slate-50">
+                        <div class="text-sm text-slate-500 mb-1">عدد الملفات/الصفوف</div>
+                        <div class="text-2xl font-bold text-slate-800" id="report-files-count">0</div>
+                    </div>
+                    <div class="border border-slate-200 p-4 rounded-lg bg-slate-50">
+                        <div class="text-sm text-slate-500 mb-1">إجمالي الطلاب</div>
+                        <div class="text-2xl font-bold text-slate-800" id="report-students-count">0</div>
+                    </div>
+                    <div class="border border-slate-200 p-4 rounded-lg bg-emerald-50 border-emerald-100">
+                        <div class="text-sm text-emerald-700 mb-1">نسبة التفوق العام</div>
+                        <div class="text-2xl font-bold text-emerald-700" id="report-excellence-rate">0%</div>
+                    </div>
+                    <div class="border border-slate-200 p-4 rounded-lg bg-red-50 border-red-100">
+                        <div class="text-sm text-red-700 mb-1">نسبة التدني العام</div>
+                        <div class="text-2xl font-bold text-red-700" id="report-low-rate">0%</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- الرسوم البيانية في التقرير -->
+            <section class="mb-12 break-inside-avoid">
+                <h3 class="text-2xl font-bold text-blue-900 mb-6 flex items-center gap-3 border-b border-blue-100 pb-2">
+                    <span class="bg-blue-600 text-white w-8 h-8 rounded-lg flex items-center justify-center text-sm">2</span>
+                    الرسوم البيانية التوضيحية
+                </h3>
+                <div id="report-charts-container">
+                    <!-- سيتم إدراج صور الرسوم البيانية هنا تلقائياً عند الطباعة -->
+                </div>
+            </section>
+
+            <!-- 3. المقارنات والترتيب -->
+            <section class="mb-12">
+                <h3 class="text-2xl font-bold text-blue-900 mb-6 flex items-center gap-3 border-b border-blue-100 pb-2">
+                    <span class="bg-blue-600 text-white w-8 h-8 rounded-lg flex items-center justify-center text-sm">3</span>
+                    التحليل المقارن (ترتيب الشعب)
+                </h3>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <!-- الأكثر تفوقاً -->
+                    <div class="bg-white rounded-xl border border-emerald-100 shadow-sm overflow-hidden">
+                        <div class="bg-emerald-50 p-4 border-b border-emerald-100">
+                            <h4 class="font-bold text-emerald-800 flex items-center gap-2">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 11l7-7 7 7M5 19l7-7 7 7"></path></svg>
+                                أعلى 5 شعب في التفوق (أ)
+                            </h4>
+                        </div>
+                        <ul id="report-rank-high" class="divide-y divide-emerald-50"></ul>
+                    </div>
+
+                    <!-- الأكثر احتياجاً -->
+                    <div class="bg-white rounded-xl border border-red-100 shadow-sm overflow-hidden">
+                        <div class="bg-red-50 p-4 border-b border-red-100">
+                            <h4 class="font-bold text-red-800 flex items-center gap-2">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 13l-7 7-7-7m14-8l-7 7-7-7"></path></svg>
+                                أعلى 5 شعب في التدني (د+هـ)
+                            </h4>
+                        </div>
+                        <ul id="report-rank-low" class="divide-y divide-red-50"></ul>
+                    </div>
+                </div>
+            </section>
+            
+            <div class="page-break"></div>
+
+            <!-- 4. جدول البيانات التفصيلي -->
+            <section class="mb-12">
+                <h3 class="text-2xl font-bold text-blue-900 mb-6 flex items-center gap-3 border-b border-blue-100 pb-2">
+                    <span class="bg-blue-600 text-white w-8 h-8 rounded-lg flex items-center justify-center text-sm">4</span>
+                    جدول البيانات التفصيلي
+                </h3>
+                <div id="report-detailed-table"></div>
+            </section>
+
+            <!-- 5. التوصيات الموحدة -->
+            <section>
+                <h3 class="text-2xl font-bold text-blue-900 mb-6 flex items-center gap-3 border-b border-blue-100 pb-2 mt-8">
+                    <span class="bg-blue-600 text-white w-8 h-8 rounded-lg flex items-center justify-center text-sm">5</span>
+                    التوصيات والخطط العلاجية المقترحة
+                </h3>
+                
+                <div id="report-recommendations" class="grid grid-cols-1 gap-6">
+                    <!-- التوصيات تدرج هنا -->
+                </div>
+            </section>
+
+            <!-- التوقيعات -->
+            <div class="mt-20 pt-10 border-t border-slate-300 grid grid-cols-3 gap-8 text-center break-inside-avoid">
+                <div>
+                    <p class="font-bold text-slate-800 mb-12">المعلم الأول / المشرف</p>
+                    <p class="text-slate-400">.............................</p>
+                </div>
+                <div>
+                    <p class="font-bold text-slate-800 mb-12">مدير المدرسة</p>
+                    <p class="text-slate-400">.............................</p>
+                </div>
+                <div>
+                    <p class="font-bold text-slate-800 mb-12">الختم المدرسي</p>
+                    <p class="text-slate-400">.............................</p>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        // المتغيرات العامة
+        let charts = {};
+        
+        // هيكل البيانات: يبدأ فارغاً لضمان عدم وجود بيانات عشوائية
+        let allFilesData = [];
+        
+        let currentViewIndex = -1; // -1 تعني عرض تجميعي، 0+ تعني عرض ملف محدد
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const today = new Date().toLocaleDateString('ar-OM', { year: 'numeric', month: 'long', day: 'numeric' });
+            document.getElementById('report-date').innerText = today;
+            renderDashboard(); // سيظهر فارغاً في البداية
+        });
+
+        // دالة حذف البيانات بالكامل
+        function clearAllData() {
+            if (confirm('هل أنت متأكد من رغبتك في حذف جميع البيانات؟')) {
+                allFilesData = [];
+                currentViewIndex = -1;
+                document.getElementById('pdf-upload').value = ''; // تصفير الـ input
+                renderDashboard();
+                alert('تم حذف البيانات بنجاح.');
+            }
+        }
+
+        // دالة حذف صف محدد
+        function deleteRow(fileIndex, rowIndex) {
+            if (confirm('هل أنت متأكد من رغبتك في حذف هذا الصف؟')) {
+                // حذف الصف من البيانات الأصلية
+                allFilesData[fileIndex].data.splice(rowIndex, 1);
+                
+                // إعادة رسم الواجهة لتحديث جميع الإحصائيات
+                renderDashboard();
+            }
+        }
+
+        // دالة تجهيز وطباعة التقرير (مع الصور)
+        function prepareAndPrint() {
+            // التأكد من وجود رسوم بيانية
+            const mainChartCanvas = document.getElementById('mainChart');
+            const pieChartCanvas = document.getElementById('pieChart');
+            const reportChartsContainer = document.getElementById('report-charts-container');
+
+            if (mainChartCanvas && pieChartCanvas && reportChartsContainer) {
+                // تحويل الرسوم البيانية إلى صور
+                const mainChartImg = mainChartCanvas.toDataURL('image/png');
+                const pieChartImg = pieChartCanvas.toDataURL('image/png');
+
+                // إدراج الصور في التقرير
+                reportChartsContainer.innerHTML = `
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="border border-slate-200 rounded-lg p-4 bg-white">
+                            <h4 class="text-center font-bold mb-4 text-slate-700">تحليل المستويات (مقارنة)</h4>
+                            <img src="${mainChartImg}" class="w-full h-auto object-contain max-h-[300px] mx-auto">
+                        </div>
+                        <div class="border border-slate-200 rounded-lg p-4 bg-white">
+                            <h4 class="text-center font-bold mb-4 text-slate-700">التوزيع العام</h4>
+                            <img src="${pieChartImg}" class="w-full h-auto object-contain max-h-[300px] mx-auto">
+                        </div>
+                    </div>
+                `;
+            } else {
+                // في حالة عدم وجود بيانات
+                if(reportChartsContainer) reportChartsContainer.innerHTML = '<p class="text-center text-slate-400">لا توجد رسوم بيانية للعرض</p>';
+            }
+
+            // انتظار بسيط لضمان تحميل الصور ثم الطباعة
+            setTimeout(() => {
+                window.print();
+            }, 300);
+        }
+
+        // التعامل مع رفع ملفات متعددة
+        async function handleFilesUpload(event) {
+            const files = event.target.files;
+            if (!files || files.length === 0) return;
+
+            document.getElementById('loader').style.display = 'block';
+            
+            let newFilesData = [];
+
+            try {
+                // معالجة كل ملف على حدة
+                for (let i = 0; i < files.length; i++) {
+                    const file = files[i];
+                    if (file.type !== 'application/pdf') continue;
+                    
+                    try {
+                        const arrayBuffer = await file.arrayBuffer();
+                        const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+                        let extractedText = '';
+                        for (let j = 1; j <= pdf.numPages; j++) {
+                            const page = await pdf.getPage(j);
+                            const textContent = await page.getTextContent();
+                            // دمج النصوص بشكل بسيط لمحاولة البحث عن أنماط
+                            const pageText = textContent.items.map(item => item.str).join(' '); // Use single space join to keep things simple
+                            extractedText += pageText + '\n';
+                        }
+                        
+                        console.log(`Extracted Text from ${file.name}:`, extractedText);
+
+                        // محاولة تحليل النص باستخدام القارئ المتقدم (الذكي)
+                        const parsedData = parsePDFContent(extractedText, file.name);
+                        
+                        if (parsedData.length > 0) {
+                            newFilesData.push({
+                                fileName: file.name.replace('.pdf', ''),
+                                data: parsedData
+                            });
+                        } else {
+                            // إذا فشل التحليل، نضيف صفاً فارغاً ليتيح للمستخدم التعبئة اليدوية
+                            newFilesData.push({
+                                fileName: file.name.replace('.pdf', ''),
+                                data: [
+                                    { name: 'فشل القراءة الآلية (أدخل البيانات يدوياً)', a: 0, b: 0, c: 0, d: 0, fail: 0, total: 0, successRate: 0 }
+                                ]
+                            });
+                        }
+
+                    } catch (e) {
+                        console.error("Error parsing PDF: ", e);
+                        // Fallback empty row
+                        newFilesData.push({
+                            fileName: file.name.replace('.pdf', ''),
+                            data: [{ name: 'خطأ في الملف - أدخل يدوياً', a: 0, b: 0, c: 0, d: 0, fail: 0, total: 0, successRate: 0 }]
+                        });
+                    }
+                }
+                
+                if (newFilesData.length > 0) {
+                    // دمج البيانات الجديدة مع القديمة (أو استبدالها حسب الرغبة، هنا سأقوم بالإضافة)
+                    allFilesData = [...allFilesData, ...newFilesData];
+                    currentViewIndex = -1; // العودة للوضع التجميعي
+                    renderDashboard();
+                    alert(`تمت العملية! تم استخدام خوارزمية ذكية لاكتشاف الدرجات. إذا كانت الأرقام غير دقيقة، يرجى الضغط عليها في الجدول لتصحيحها.`);
+                }
+
+            } catch (error) {
+                console.error(error);
+                alert('حدث خطأ غير متوقع.');
+            } finally {
+                document.getElementById('loader').style.display = 'none';
+            }
+        }
+
+        // دالة تحليل النص المتقدمة (Summation Check Parser)
+        // هذه الدالة تبحث عن التسلسل المنطقي للأرقام بغض النظر عن الفواصل
+        function parsePDFContent(text, filename) {
+            const rows = [];
+            
+            // 1. تنظيف النص: إزالة الرموز التي قد تكون مضللة (مثل الفواصل وعلامات التنصيص التي قد لا تكون في مكانها الصحيح)
+            // ونستبدلها بمسافات لضمان عدم التصاق الأرقام
+            let cleanText = text.replace(/["',]/g, ' ');
+            
+            // 2. تقسيم النص إلى كلمات (Tokens)
+            const tokens = cleanText.split(/\s+/).filter(t => t.trim().length > 0);
+            
+            // 3. البحث في النافذة المنزلقة (Sliding Window)
+            // نبحث عن نمط: نسبة(float) -> نجاح(int) -> كلي(int) -> راسب(int) -> د(int) -> ج(int) -> ب(int) -> أ(int)
+            // الشرط الأساسي: (راسب + د + ج + ب + أ) يجب أن يساوي (الكلي) تقريباً
+            
+            for (let i = 0; i < tokens.length - 8; i++) {
+                // محاولة تحويل الرموز الحالية إلى أرقام
+                const rate = parseFloat(tokens[i]);
+                const pass = parseInt(tokens[i+1]);
+                const total = parseInt(tokens[i+2]);
+                const fail = parseInt(tokens[i+3]);
+                const d = parseInt(tokens[i+4]);
+                const c = parseInt(tokens[i+5]);
+                const b = parseInt(tokens[i+6]);
+                const a = parseInt(tokens[i+7]);
+                
+                // التحقق الأولي من أن جميع القيم رقمية
+                if (isNaN(rate) || isNaN(pass) || isNaN(total) || isNaN(fail) || isNaN(d) || isNaN(c) || isNaN(b) || isNaN(a)) continue;
+                
+                // التحقق المنطقي (الجوهر):
+                // مجموع الدرجات التفصيلية يجب أن يساوي المجموع الكلي
+                const sumGrades = fail + d + c + b + a;
+                
+                // نسمح بفرق بسيط (1) تحسباً لبعض الحالات الخاصة، لكن غالباً يجب أن يكون متطابقاً
+                if (total === sumGrades || Math.abs(total - sumGrades) <= 1) {
+                     // وجدنا صفاً صحيحاً!
+                     
+                     // محاولة العثور على اسم الشعبة
+                     // عادة يكون بعد الأرقام مباشرة أو بعدها بقليل (مثل "الخامس / 1")
+                     let name = `شعبة ${rows.length + 1}`; // افتراضي
+                     
+                     // نأخذ الرموز الـ 5 التالية ونحاول تجميعها كاسم
+                     // نبحث عن نمط يحتوي على حروف عربية وأرقام وشرطة مائلة
+                     const potentialNameParts = tokens.slice(i+8, i+13);
+                     const potentialNameStr = potentialNameParts.join(' ');
+
+                     // --- طبقة حماية 1: التحقق من الكلمات الدالة على الإجمالي قبل استخراج الاسم ---
+                     if (potentialNameStr.includes('الإجمالي') || 
+                         potentialNameStr.includes('الاجمالي') || 
+                         potentialNameStr.includes('الجمالي') || 
+                         potentialNameStr.includes('المجموع') || 
+                         potentialNameStr.includes('جملة') ||
+                         potentialNameStr.includes('عامة') ||
+                         potentialNameStr.includes('Total') ||
+                         potentialNameStr.includes('Sum')) {
+                         i += 7; // تجاوز الأرقام لتجنب تكرار القراءة
+                         continue; // عدم إضافة الصف للقائمة
+                     }
+
+                     // regex للبحث عن نمط الشعبة مثل "الخامس/1" أو "5/1" أو "خامس 1"
+                     // يبحث عن (نص عربي أو رقم) ثم (مسافة وشرطة ومسافة اختيارية) ثم (رقم)
+                     const nameRegex = /([\u0600-\u06FF]+\s*[\/\-]\s*\d+|\d+\s*[\/\-]\s*[\u0600-\u06FF]+|[\u0600-\u06FF]+\s+\d+)/;
+                     const nameMatch = potentialNameStr.match(nameRegex);
+                     
+                     if (nameMatch) {
+                         name = nameMatch[0];
+                     } else {
+                        // محاولة أخرى: قد يكون الاسم مجرد "1" أو "2" إذا كان اسم الملف يحتوي على الصف
+                        // لكن سنستخدم الاستخراج البسيط للنص العربي القريب
+                        const arabicName = potentialNameStr.match(/[\u0600-\u06FF0-9\/]+/);
+                         if (arabicName && arabicName[0].length > 1) name = arabicName[0];
+                     }
+
+                    // --- طبقة حماية 2: التحقق النهائي من الاسم المستخرج ---
+                    if (name.includes('الإجمالي') || name.includes('الاجمالي') || name.includes('الجمالي') || name.includes('Total') || name.includes('المجموع')) {
+                        i += 7; 
+                        continue; 
+                    }
+                    // ----------------------------------------
+
+                     // حساب نسبة النجاح الحقيقية
+                     const calculatedSuccessRate = total > 0 ? (( (total - fail) / total ) * 100).toFixed(2) : 0;
+
+                     rows.push({
+                        name: name,
+                        a: a, b: b, c: c, d: d, fail: fail,
+                        total: total,
+                        successRate: calculatedSuccessRate
+                     });
+                     
+                     // نقفز للأمام لتجنب تداخل الأرقام (وجدنا 8 أرقام، نقفز 7 خطوات لأن الحلقة ستزيد 1)
+                     i += 7;
+                }
+            }
+            
+            // --- طبقة حماية 3: فلترة نهائية للمصفوفة المستخرجة ---
+            const finalRows = rows.filter(row => {
+                 const n = row.name;
+                 return !(n.includes('الإجمالي') || n.includes('الاجمالي') || n.includes('الجمالي') || n.includes('المجموع') || n.includes('جملة') || n.includes('Total'));
+            });
+
+            return finalRows;
+        }
+
+        // دالة تحديث البيانات عند التعديل اليدوي في الجدول
+        function updateDataFromEdit(fileIndex, rowIndex, field, value) {
+            const val = parseInt(value) || 0;
+            const fileData = allFilesData[fileIndex].data[rowIndex];
+            
+            // تحديث الحقل المعدل
+            fileData[field] = val;
+            
+            // إعادة حساب المجموع ونسبة النجاح
+            const total = fileData.a + fileData.b + fileData.c + fileData.d + fileData.fail;
+            const successCount = total - fileData.fail;
+            const successRate = total > 0 ? ((successCount / total) * 100).toFixed(2) : 0;
+            
+            fileData.total = total;
+            fileData.successRate = successRate;
+            
+            // إعادة رسم الواجهة بالكامل لتحديث الرسوم والمجاميع
+            renderDashboard();
+        }
+        
+        function updateNameFromEdit(fileIndex, rowIndex, value) {
+             allFilesData[fileIndex].data[rowIndex].name = value;
+             renderDashboard();
+        }
+
+        function switchView(index) {
+            currentViewIndex = index;
+            renderDashboard();
+        }
+
+        function renderDashboard() {
+            // 1. تحديث أزرار التنقل بين الملفات
+            updateFileNavButtons();
+            
+            // 2. تجميع البيانات للعرض
+            let displayData = [];
+            
+            if (allFilesData.length === 0) {
+                // حالة فارغة
+                document.getElementById('dashboard-title').innerText = "اللوحة التجميعية الشاملة (لا توجد بيانات)";
+                document.getElementById('stat-total').innerText = "0";
+                document.getElementById('stat-excellence').innerText = "0";
+                document.getElementById('stat-low').innerText = "0";
+                document.getElementById('data-table-body').innerHTML = '<tr><td colspan="11" class="text-center py-8 text-slate-400">لا توجد ملفات مرفقة. يرجى رفع ملف PDF.</td></tr>';
+                if (charts.main) charts.main.destroy();
+                if (charts.pie) charts.pie.destroy();
+                return;
+            }
+
+            // إعداد البيانات للعرض (مع الاحتفاظ بالمؤشرات للأصل لتسهيل التعديل)
+            if (currentViewIndex === -1) {
+                document.getElementById('dashboard-title').innerText = "اللوحة التجميعية الشاملة";
+                document.getElementById('current-view-badge').innerText = "كل الملفات";
+                
+                allFilesData.forEach((file, fIdx) => {
+                    file.data.forEach((row, rIdx) => {
+                        displayData.push({ 
+                            ...row, 
+                            displayName: `${file.fileName} - ${row.name}`, 
+                            sourceFile: file.fileName,
+                            originalFileIndex: fIdx,
+                            originalRowIndex: rIdx
+                        });
+                    });
+                });
+            } else {
+                const targetFile = allFilesData[currentViewIndex];
+                document.getElementById('dashboard-title').innerText = `تحليل: ${targetFile.fileName}`;
+                document.getElementById('current-view-badge').innerText = "ملف مفرد";
+                
+                displayData = targetFile.data.map((row, rIdx) => ({ 
+                    ...row, 
+                    displayName: row.name, 
+                    sourceFile: targetFile.fileName,
+                    originalFileIndex: currentViewIndex,
+                    originalRowIndex: rIdx
+                }));
+            }
+
+            updateStats(displayData);
+            updateTable(displayData);
+            updateCharts(displayData);
+            generateAggregateReport(displayData);
+        }
+
+        function updateFileNavButtons() {
+            const container = document.getElementById('files-buttons');
+            const bar = document.getElementById('files-bar');
+            
+            if (allFilesData.length === 0) {
+                bar.classList.add('hidden');
+                return;
+            }
+            
+            bar.classList.remove('hidden');
+            container.innerHTML = '';
+
+            const allBtn = document.createElement('button');
+            allBtn.innerText = "الكل";
+            allBtn.className = `px-4 py-1.5 rounded-full text-sm font-bold transition-all ${currentViewIndex === -1 ? 'bg-purple-600 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`;
+            allBtn.onclick = () => switchView(-1);
+            container.appendChild(allBtn);
+
+            allFilesData.forEach((file, idx) => {
+                const btn = document.createElement('button');
+                btn.innerText = file.fileName;
+                btn.className = `px-4 py-1.5 rounded-full text-sm font-bold transition-all ${currentViewIndex === idx ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`;
+                btn.onclick = () => switchView(idx);
+                container.appendChild(btn);
+            });
+        }
+
+        function updateStats(data) {
+            const totalStudents = data.reduce((acc, cur) => acc + cur.total, 0);
+            const totalExc = data.reduce((acc, cur) => acc + cur.a, 0);
+            const totalLow = data.reduce((acc, cur) => acc + (cur.d + cur.fail), 0);
+            const totalFail = data.reduce((acc, cur) => acc + cur.fail, 0);
+            
+            // حساب نسبة النجاح العامة (إجمالي الناجحين / إجمالي الطلاب)
+            const totalPassed = totalStudents - totalFail;
+            const avgSuccess = totalStudents > 0 ? ((totalPassed / totalStudents) * 100).toFixed(2) : 0;
+
+            document.getElementById('stat-total').innerText = totalStudents;
+            document.getElementById('stat-excellence').innerText = totalExc;
+            document.getElementById('rate-excellence').innerText = totalStudents ? ((totalExc/totalStudents)*100).toFixed(1) + '%' : '0%';
+            
+            document.getElementById('stat-low').innerText = totalLow;
+            document.getElementById('rate-low').innerText = totalStudents ? ((totalLow/totalStudents)*100).toFixed(1) + '%' : '0%';
+            
+            document.getElementById('stat-success-rate').innerText = avgSuccess + '%';
+            document.getElementById('files-count-badge').innerText = `${allFilesData.length} ملفات / ${data.length} شعب`;
+        }
+
+        function updateTable(data) {
+            const tbody = document.getElementById('data-table-body');
+            tbody.innerHTML = '';
+            
+            data.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0';
+                
+                // دالة مساعدة لإنشاء خلية قابلة للتعديل
+                const createEditableCell = (field, value, colorClass = 'text-slate-600') => `
+                    <td class="px-6 py-4">
+                        <div 
+                            contenteditable="true" 
+                            class="editable-cell w-full px-2 py-1 rounded text-center font-bold ${colorClass}"
+                            oninput="updateDataFromEdit(${row.originalFileIndex}, ${row.originalRowIndex}, '${field}', this.innerText)"
+                        >${value}</div>
+                    </td>
+                `;
+
+                // حساب النسبة للصف
+                const rowSuccessRate = row.total > 0 ? (((row.total - row.fail) / row.total) * 100).toFixed(2) + '%' : '0%';
+
+                // زر الحذف
+                const deleteBtn = `
+                    <td class="px-6 py-4 text-center">
+                        <button 
+                            onclick="deleteRow(${row.originalFileIndex}, ${row.originalRowIndex})"
+                            class="text-slate-400 hover:text-red-600 transition-colors p-1 rounded-full hover:bg-red-50"
+                            title="حذف هذا الصف"
+                        >
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        </button>
+                    </td>
+                `;
+
+                tr.innerHTML = `
+                    <td class="px-6 py-4 text-slate-500 font-medium text-xs">${row.sourceFile}</td>
+                    <td class="px-6 py-4 font-bold text-slate-700">
+                         <div contenteditable="true" class="editable-cell px-2 py-1 rounded" oninput="updateNameFromEdit(${row.originalFileIndex}, ${row.originalRowIndex}, this.innerText)">${row.name}</div>
+                    </td>
+                    ${createEditableCell('a', row.a, 'text-emerald-600')}
+                    ${createEditableCell('b', row.b, 'text-blue-600')}
+                    ${createEditableCell('c', row.c, 'text-amber-600')}
+                    ${createEditableCell('d', row.d, 'text-orange-600')}
+                    ${createEditableCell('fail', row.fail, 'text-red-600')}
+                    <td class="px-6 py-4 font-bold text-red-700 bg-red-50">${row.d + row.fail}</td>
+                    <td class="px-6 py-4 font-bold text-slate-800">${row.total}</td>
+                    <td class="px-6 py-4 font-bold text-blue-700 bg-blue-50">${rowSuccessRate}</td>
+                    ${deleteBtn}
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function updateCharts(data) {
+            const labels = data.map(d => d.displayName);
+            
+            if (charts.main) charts.main.destroy();
+            if (charts.pie) charts.pie.destroy();
+
+            const ctxMain = document.getElementById('mainChart').getContext('2d');
+            charts.main = new Chart(ctxMain, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'أ (ممتاز)', data: data.map(d=>d.a), backgroundColor: '#10B981', stack: 'Stack 0' },
+                        { label: 'ب (جيد جداً)', data: data.map(d=>d.b), backgroundColor: '#3B82F6', stack: 'Stack 0' },
+                        { label: 'ج (جيد)', data: data.map(d=>d.c), backgroundColor: '#F59E0B', stack: 'Stack 0' },
+                        { label: 'د (مقبول)', data: data.map(d=>d.d), backgroundColor: '#8B5CF6', stack: 'Stack 0' },
+                        { label: 'هـ (ضعيف)', data: data.map(d=>d.fail), backgroundColor: '#EF4444', stack: 'Stack 0' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: { 
+                        x: { 
+                            display: true, // تفعيل ظهور أسماء الأعمدة
+                            stacked: true,
+                            ticks: {
+                                font: { family: 'Tajawal', size: 11 },
+                                autoSkip: false, // ضمان عدم إخفاء بعض الأسماء إذا كثرت
+                                maxRotation: 45,
+                                minRotation: 0
+                            },
+                            grid: {
+                                display: false
+                            }
+                        }, 
+                        y: { 
+                            stacked: true,
+                            beginAtZero: true
+                        } 
+                    },
+                    plugins: {
+                        legend: {
+                            labels: { font: { family: 'Tajawal' } }
+                        },
+                        tooltip: {
+                            bodyFont: { family: 'Tajawal' },
+                            titleFont: { family: 'Tajawal' }
+                        }
+                    }
+                }
+            });
+
+            const totals = [
+                data.reduce((a,c)=>a+c.a,0),
+                data.reduce((a,c)=>a+c.b,0),
+                data.reduce((a,c)=>a+c.c,0),
+                data.reduce((a,c)=>a+c.d,0),
+                data.reduce((a,c)=>a+c.fail,0),
+            ];
+            
+            const ctxPie = document.getElementById('pieChart').getContext('2d');
+            charts.pie = new Chart(ctxPie, {
+                type: 'doughnut',
+                data: {
+                    labels: ['أ', 'ب', 'ج', 'د', 'هـ'],
+                    datasets: [{ data: totals, backgroundColor: ['#10B981', '#3B82F6', '#F59E0B', '#8B5CF6', '#EF4444'] }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'left' } } }
+            });
+        }
+
+        function generateAggregateReport(data) {
+            // ... (نفس منطق التقرير السابق) ...
+             const totalStudents = data.reduce((acc, cur) => acc + cur.total, 0);
+            const totalExc = data.reduce((acc, cur) => acc + cur.a, 0);
+            const totalLow = data.reduce((acc, cur) => acc + (cur.d + cur.fail), 0);
+            const totalFail = data.reduce((acc, cur) => acc + cur.fail, 0);
+            
+            const totalPassed = totalStudents - totalFail;
+            const excRate = totalStudents ? ((totalExc/totalStudents)*100).toFixed(1) : 0;
+            const lowRate = totalStudents ? ((totalLow/totalStudents)*100).toFixed(1) : 0;
+            const avgSuccess = totalStudents > 0 ? ((totalPassed / totalStudents) * 100).toFixed(2) : 0;
+
+            document.getElementById('report-files-count').innerText = `${allFilesData.length} ملفات / ${data.length} شعب`;
+            document.getElementById('report-students-count').innerText = totalStudents;
+            document.getElementById('report-excellence-rate').innerText = excRate + '%';
+            document.getElementById('report-low-rate').innerText = lowRate + '%';
+
+            // 1. الملخص
+            const sortedByExc = [...data].sort((a,b) => b.a - a.a);
+            const sortedByLow = [...data].sort((a,b) => (b.d+b.fail) - (a.d+a.fail));
+            
+            let summaryHTML = `
+                <p>بناءً على تحليل البيانات المدخلة لعدد <b>${data.length}</b> شعبة، 
+                بلغ إجمالي عدد الطلاب <b>${totalStudents}</b> طالباً. 
+                أظهرت النتائج أن نسبة التفوق العامة بلغت <b>${excRate}%</b>، 
+                بينما سجلت نسبة التدني <b>${lowRate}%</b>،
+                وبلغت نسبة النجاح العامة لجميع الشعب <b>${avgSuccess}%</b>.</p>
+            `;
+            
+            if(sortedByExc.length > 0) {
+                 summaryHTML += `
+                <p class="mt-4">
+                تصدرت الشعبة <b>${sortedByExc[0].displayName}</b> القائمة بأعلى عدد من المتفوقين (${sortedByExc[0].a}).
+                في المقابل، سجلت الشعبة <b>${sortedByLow[0].displayName}</b> أعلى عدد لحالات التدني (${sortedByLow[0].d + sortedByLow[0].fail}).
+                </p>`;
+            }
+            
+            document.getElementById('executive-summary').innerHTML = summaryHTML;
+
+            // 2. القوائم
+            const top5 = sortedByExc.slice(0, 5);
+            const low5 = sortedByLow.slice(0, 5);
+
+            document.getElementById('report-rank-high').innerHTML = top5.map((row, i) => `
+                <li class="p-3 flex justify-between items-center bg-white hover:bg-slate-50">
+                    <div class="flex items-center gap-3">
+                        <span class="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center text-xs">${i+1}</span>
+                        <div><div class="font-bold text-slate-800">${row.displayName}</div></div>
+                    </div>
+                    <div class="text-emerald-700 font-bold text-lg">${row.a}</div>
+                </li>
+            `).join('');
+
+            document.getElementById('report-rank-low').innerHTML = low5.map((row, i) => `
+                <li class="p-3 flex justify-between items-center bg-white hover:bg-slate-50">
+                    <div class="flex items-center gap-3">
+                        <span class="w-6 h-6 rounded-full bg-red-100 text-red-700 font-bold flex items-center justify-center text-xs">${i+1}</span>
+                        <div><div class="font-bold text-slate-800">${row.displayName}</div></div>
+                    </div>
+                    <div class="text-red-700 font-bold text-lg">${row.d + row.fail}</div>
+                </li>
+            `).join('');
+
+            // 4. جدول البيانات التفصيلي (للطباعة)
+            const printTableContainer = document.getElementById('report-detailed-table');
+            if (printTableContainer) {
+                printTableContainer.innerHTML = `
+                    <table class="w-full text-sm text-right border-collapse border border-slate-300">
+                        <thead class="bg-slate-100 text-slate-700 font-bold">
+                            <tr>
+                                <th class="border border-slate-300 px-3 py-2">الشعبة</th>
+                                <th class="border border-slate-300 px-3 py-2">أ</th>
+                                <th class="border border-slate-300 px-3 py-2">ب</th>
+                                <th class="border border-slate-300 px-3 py-2">ج</th>
+                                <th class="border border-slate-300 px-3 py-2">د</th>
+                                <th class="border border-slate-300 px-3 py-2">هـ</th>
+                                <th class="border border-slate-300 px-3 py-2">المجموع</th>
+                                <th class="border border-slate-300 px-3 py-2">نسبة النجاح</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.map(row => `
+                                <tr class="border-b border-slate-200">
+                                    <td class="border border-slate-300 px-3 py-2 font-bold">${row.name}</td>
+                                    <td class="border border-slate-300 px-3 py-2 text-emerald-700">${row.a}</td>
+                                    <td class="border border-slate-300 px-3 py-2 text-blue-700">${row.b}</td>
+                                    <td class="border border-slate-300 px-3 py-2 text-amber-700">${row.c}</td>
+                                    <td class="border border-slate-300 px-3 py-2 text-purple-700">${row.d}</td>
+                                    <td class="border border-slate-300 px-3 py-2 text-red-700">${row.fail}</td>
+                                    <td class="border border-slate-300 px-3 py-2 font-bold">${row.total}</td>
+                                    <td class="border border-slate-300 px-3 py-2">${row.successRate}%</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            }
+
+            // 5. التوصيات
+            const recContainer = document.getElementById('report-recommendations');
+            recContainer.innerHTML = '';
+            
+            const criticalClasses = data.filter(r => (r.d + r.fail) >= 3);
+            
+            if (criticalClasses.length > 0) {
+                let listItems = criticalClasses.map(c => `<li class="mb-1 text-slate-700"><b class="text-red-700">${c.displayName}</b> (${c.d+c.fail} حالات)</li>`).slice(0, 6).join('');
+                recContainer.innerHTML += `
+                    <div class="bg-white border-l-4 border-red-500 p-6 shadow-sm rounded-r-lg break-inside-avoid">
+                        <h4 class="font-bold text-lg text-red-800 mb-3">⚠️ التدخل العلاجي العاجل</h4>
+                        <p class="text-slate-700 mb-3">شعب تحتاج لتدخل:</p>
+                        <ul class="list-disc list-inside bg-red-50 p-4 rounded-lg mb-3 text-sm">${listItems}</ul>
+                    </div>
+                `;
+            } else {
+                recContainer.innerHTML += `
+                    <div class="bg-white border-l-4 border-emerald-500 p-6 shadow-sm rounded-r-lg">
+                        <h4 class="font-bold text-lg text-emerald-800 mb-2">✅ الأداء مستقر</h4>
+                        <p class="text-slate-700">لا توجد حالات تدني حرجة تتطلب تدخلاً طارئاً.</p>
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>
